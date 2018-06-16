@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
+	"log"
 	"net/http"
-
 	"sync"
 
+	"github.com/google/tcpproxy"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 )
@@ -104,9 +106,8 @@ func registerNodeRequest(c echo.Context) error {
 	return c.JSON(http.StatusOK, nodeStates)
 }
 
-func main() {
-	containerStates = make([]*ContainerState, 0)
-	nodeStates = make([]*NodeState, 0)
+func apiServer(wg sync.WaitGroup) {
+	defer wg.Done()
 	e := echo.New()
 	// Middleware
 	e.Use(middleware.Logger())
@@ -120,4 +121,25 @@ func main() {
 	e.DELETE("/containers/:name", deleteContainerRequest)
 	e.POST("/node/:name", registerNodeRequest)
 	e.Logger.Fatal(e.Start(":1323"))
+}
+
+func proxyServer(wg sync.WaitGroup) {
+	defer wg.Done()
+	var p tcpproxy.Proxy
+	target := tcpproxy.ToMulti([]string{})
+	p.AddRoute(":8081", target) // fallback
+	log.Fatal(p.Run())
+}
+
+func main() {
+	var wg sync.WaitGroup
+
+	containerStates = make([]*ContainerState, 0)
+	nodeStates = make([]*NodeState, 0)
+
+	wg.Add(2)
+	go apiServer(wg)
+	go proxyServer(wg)
+	fmt.Println("Started server..")
+	wg.Wait()
 }

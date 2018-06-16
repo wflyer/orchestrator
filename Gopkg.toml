@@ -33,9 +33,9 @@
   name = "github.com/docker/go-connections"
   version = "0.3.0"
 
-[[constraint]]
-  branch = "master"
-  name = "github.com/google/tcpproxy"
+#[[constraint]]
+#  branch = "master"
+#  name = "github.com/google/tcpproxy"
 
 [[constraint]]
   name = "github.com/labstack/echo"
@@ -48,6 +48,10 @@
 [[constraint]]
   name = "github.com/satori/go.uuid"
   version = "1.2.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/lafikl/liblb"
 
 [prune]
   go-tests = true

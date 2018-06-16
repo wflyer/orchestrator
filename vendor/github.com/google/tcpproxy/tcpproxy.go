@@ -61,6 +61,8 @@ import (
 	"log"
 	"net"
 	"time"
+
+	"github.com/lafikl/liblb/r2"
 )
 
 // Proxy is a proxy. Its zero value is a valid proxy that does
@@ -300,6 +302,11 @@ func To(addr string) *DialProxy {
 	return &DialProxy{Addr: addr}
 }
 
+func ToMulti(addrArr []string) *DialProxy {
+	lb := r2.New(addrArr...)
+	return &DialProxy{LB: lb}
+}
+
 // DialProxy implements Target by dialing a new connection to Addr
 // and then proxying data back and forth.
 //
@@ -307,6 +314,8 @@ func To(addr string) *DialProxy {
 type DialProxy struct {
 	// Addr is the TCP address to proxy to.
 	Addr string
+
+	LB *r2.R2
 
 	// KeepAlivePeriod sets the period between TCP keep alives.
 	// If zero, a default is used. To disable, use a negative number.
@@ -354,7 +363,18 @@ func (dp *DialProxy) HandleConn(src net.Conn) {
 	if dp.DialTimeout >= 0 {
 		ctx, cancel = context.WithTimeout(ctx, dp.dialTimeout())
 	}
-	dst, err := dp.dialContext()(ctx, "tcp", dp.Addr)
+
+	var addr string
+	var err error
+	if dp.LB != nil {
+		addr, err = dp.LB.Balance()
+		if err != nil {
+			addr = dp.Addr
+		}
+	} else {
+		addr = dp.Addr
+	}
+	dst, err := dp.dialContext()(ctx, "tcp", addr)
 	if cancel != nil {
 		cancel()
 	}
