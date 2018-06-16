@@ -5,6 +5,7 @@ type ContainerState struct {
 	ContainerID string
 	Node        string
 	Status      string
+	Addr        string
 }
 
 type CreateContainerResponse struct {

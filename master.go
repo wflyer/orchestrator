@@ -12,11 +12,13 @@ var containerStates []*ContainerState
 
 var containerStatesLock = sync.RWMutex{}
 
+var proxyTarget *tcpproxy.DialProxy
+
 func proxyServer(wg sync.WaitGroup) {
 	defer wg.Done()
 	var p tcpproxy.Proxy
-	target := tcpproxy.ToMulti([]string{})
-	p.AddRoute(":8081", target) // fallback
+	proxyTarget = tcpproxy.ToMulti([]string{})
+	p.AddRoute(":8081", proxyTarget)
 	log.Fatal(p.Run())
 }
 

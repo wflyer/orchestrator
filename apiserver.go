@@ -134,9 +134,21 @@ func updateNodeRequest(c echo.Context) error {
 		for _, oldCState := range containerStates {
 			if newCState.Name == oldCState.Name {
 				fmt.Println("update container: old: ", oldCState, "new: ", newCState)
+				if newCState.Status == "running" {
+					if oldCState.Status != "running" && newCState.Addr != "" {
+						log.Info("add new container to lb: ", newCState.Addr)
+						proxyTarget.LB.Add(newCState.Addr)
+					}
+				} else {
+					log.Info("remove container from lb: ", oldCState.Addr)
+					proxyTarget.LB.Remove(oldCState.Addr)
+				}
+
 				oldCState.Status = newCState.Status
 				oldCState.ContainerID = newCState.ContainerID
 				oldCState.Node = newCState.Node
+				oldCState.Addr = newCState.Addr
+
 			}
 			break
 		}

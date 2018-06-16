@@ -21,6 +21,7 @@ var syncing sync.RWMutex
 var imageName = "counter"
 var imageCmd = []string{"/app/server"}
 var exposedPorts = []string{"8080:8080/tcp"}
+var containerPort = "8080"
 
 func syncWithMaster() {
 
@@ -54,6 +55,7 @@ func syncWithMaster() {
 				ContainerID: cID,
 				Node:        nodename,
 				Status:      "running",
+				Addr:        myIP + ":" + containerPort,
 			}
 			updatedCStates = append(updatedCStates, newCState)
 		}
@@ -87,6 +89,7 @@ func syncWithMaster() {
 }
 
 var (
+	myIP       string
 	myAddr     string
 	nodename   string
 	masterAddr string
@@ -109,10 +112,14 @@ func main() {
 	///containerStates = make([]*ContainerState, 0)
 	log.SetLevel(log.DEBUG)
 
+	myIP = os.Getenv("ip")
 	myAddr = os.Getenv("addr")
 	nodename = os.Getenv("nodename")
 	masterAddr = os.Getenv("masteraddr")
 
+	if myIP == "" {
+		myIP = "127.0.0.1"
+	}
 	if myAddr == "" {
 		myAddr = "http://127.0.0.1:1324"
 	}
