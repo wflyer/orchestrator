@@ -39,6 +39,8 @@ func runContainer(name, image string, cmd, exposedPorts []string) (containerID s
 		ExposedPorts: portSet,
 	}
 
+	fmt.Println("running container", name)
+
 	resp, err := cli.ContainerCreate(context.Background(), config, hostConfig, nil, name)
 	if err != nil {
 		return

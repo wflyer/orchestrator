@@ -1,82 +1,117 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
+	"time"
+
+	"bytes"
+
+	"github.com/labstack/echo"
+	"github.com/labstack/gommon/log"
 )
 
-/*
-type ContainerState struct {
-	Name        string
-	ContainerID string
-	Node        string
-	Status      string
-}
+var syncing sync.RWMutex
 
-var containerStates []*ContainerState
+var imageName = "counter"
+var imageCmd = []string{"/app/server"}
+var exposedPorts = []string{"8080:8080/tcp"}
 
-var containerStatesLock = sync.RWMutex{}
+func syncWithMaster() {
 
-func listContainerRequest(c echo.Context) error {
-	containerStatesLock.RLock()
-	defer containerStatesLock.RUnlock()
-	return c.JSON(http.StatusOK, containerStates)
-}
+	syncing.RLock()
+	defer syncing.RUnlock()
 
-type CreateContainerResponse struct {
-	ContainerStates []*ContainerState
-	Status          string
-	Reason          string
-}
-
-func createContainerRequest(c echo.Context) error {
-	name := c.Param("name")
-
-	containerStatesLock.Lock()
-	defer containerStatesLock.Unlock()
-	containerState := &ContainerState{
-		Name:        name,
-		ContainerID: "",
-		Node:        "",
-		Status:      "pending",
+	resp, err := http.Get(masterAddr + "/node/" + nodename)
+	if err != nil {
+		panic(err)
 	}
-	containerStates = append(containerStates, containerState)
+	defer resp.Body.Close()
 
-	resp := &CreateContainerResponse{
-		ContainerStates: containerStates,
-		Status:          "ok",
-		Reason:          "accepted",
-	}
-	return c.JSON(http.StatusAccepted, resp)
-}
+	body, err := ioutil.ReadAll(resp.Body)
+	log.Debug("sync from server:", string(body))
+	nodeResp := NodeResponse{}
+	json.Unmarshal(body, &nodeResp)
 
-func deleteContainerRequest(c echo.Context) error {
-	name := c.Param("name")
+	updatedCStates := make([]*ContainerState, 0)
 
-	containerStatesLock.Lock()
-	defer containerStatesLock.Unlock()
-	for _, state := range containerStates {
-		fmt.Println(state.Name, name)
-		if state.Name == name {
-			state.Status = "deleting"
+	for _, cState := range nodeResp.ContainerStates {
+		if cState.Status == "pending" {
+			// run container
+			// 1. execute run container
+			cID, err := runContainer(cState.Name, imageName, imageCmd, exposedPorts)
+			if err != nil {
+				log.Error("error running container: ", err)
+				continue
+			}
+			newCState := &ContainerState{
+				Name:        cState.Name,
+				ContainerID: cID,
+				Node:        nodename,
+				Status:      "running",
+			}
+			updatedCStates = append(updatedCStates, newCState)
 		}
 	}
-	resp := &CreateContainerResponse{
-		ContainerStates: containerStates,
-		Status:          "ok",
-		Reason:          "accepted",
+	// report to server
+	if len(updatedCStates) > 0 {
+		updatedReq := NodeUpdateRequest{
+			Name: nodename,
+			UpdatedContainerStates: updatedCStates,
+		}
+		bodyB, err := json.Marshal(updatedReq)
+		log.Debug("sync to master:", string(bodyB))
+		if err != nil {
+			panic(err)
+		}
+
+		body := bytes.NewReader(bodyB)
+		resp, err := http.Post(
+			masterAddr+"/node/"+nodename+"/update", "application/json", body)
+
+		if err != nil {
+			fmt.Println("update error: ", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			fmt.Println("update error: not expected status ", resp.StatusCode)
+		}
 	}
-	return c.JSON(http.StatusAccepted, resp)
+
+	time.Sleep(time.Duration(10) * time.Second)
+	go syncWithMaster()
 }
-*/
+
+var (
+	myAddr     string
+	nodename   string
+	masterAddr string
+)
+
+func workerServer() {
+	e := echo.New()
+	/*
+		e.GET("/", func(c echo.Context) error {
+			return c.String(http.StatusOK, "Hello, World!")
+		})
+		e.GET("/containers", listContainerRequest)
+		e.POST("/containers/:name", createContainerRequest)
+		e.DELETE("/containers/:name", deleteContainerRequest)
+	*/
+	e.Logger.Fatal(e.Start(":1324"))
+}
 
 func main() {
-	myAddr := os.Getenv("addr")
-	nodename := os.Getenv("nodename")
-	masterAddr := os.Getenv("masteraddr")
+	///containerStates = make([]*ContainerState, 0)
+	log.SetLevel(log.DEBUG)
+
+	myAddr = os.Getenv("addr")
+	nodename = os.Getenv("nodename")
+	masterAddr = os.Getenv("masteraddr")
 
 	if myAddr == "" {
 		myAddr = "http://127.0.0.1:1324"
@@ -85,6 +120,8 @@ func main() {
 	if masterAddr == "" {
 		masterAddr = "http://127.0.0.1:1323"
 	}
+
+	// Register to server
 	resp, err := http.PostForm(masterAddr+"/node/"+nodename,
 		url.Values{"addr": {myAddr}})
 
@@ -95,16 +132,12 @@ func main() {
 	body, err := ioutil.ReadAll(resp.Body)
 	fmt.Println(string(body))
 
-	/*
-		// register to server
-		containerStates = make([]*ContainerState, 0)
-		e := echo.New()
-		e.GET("/", func(c echo.Context) error {
-			return c.String(http.StatusOK, "Hello, World!")
-		})
-		e.GET("/containers", listContainerRequest)
-		e.POST("/containers/:name", createContainerRequest)
-		e.DELETE("/containers/:name", deleteContainerRequest)
-		e.Logger.Fatal(e.Start(":1323"))
-	*/
+	// apiserver to receive req from master
+	go workerServer()
+
+	go syncWithMaster()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	wg.Wait()
 }
