@@ -9,25 +9,18 @@ import (
 func main() {
 	var err error
 
-	/*
-		err = removeContainer("counter-server")
-		if err != nil {
-			fmt.Println(err)
-		}
+	err = removeContainer("counter-server")
+	if err != nil {
+		fmt.Println(err)
+	}
 
-		cli, err := client.NewEnvClient()
-		if err != nil {
-			panic(err)
-		}
+	containerID, err := runContainer("counter-server", "counter", []string{"/app/server"}, []string{"8080:8080/tcp"})
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(containerID)
 
-		containerID, err := runContainer(cli, "counter-server", "counter", []string{"/app/server"}, []string{"8080:8080/tcp"})
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Println(containerID)
-	*/
-
-	uuidstr, _ := uuid.NewV4()
+	uuidstr := uuid.NewV4()
 	checkpointID := fmt.Sprintf("counter-server-%s", uuidstr)
 	checkpointDir := "/tmp/" + checkpointID
 	fmt.Println(checkpointID)

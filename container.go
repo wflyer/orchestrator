@@ -16,7 +16,9 @@ import (
 // cmd: optional. ex. []string{"/app/server", "1"}
 // exposedPorts: optional. ex. []string{"8080:8080/tcp"}
 // returns containerID and err
-func runContainer(cli *client.Client, name, image string, cmd, exposedPorts []string) (containerID string, err error) {
+func runContainer(name, image string, cmd, exposedPorts []string) (containerID string, err error) {
+	cli, err := client.NewEnvClient()
+	defer cli.Close()
 
 	// expose ports
 	portSet, portBindings, err := nat.ParsePortSpecs(exposedPorts)
