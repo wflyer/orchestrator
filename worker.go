@@ -12,8 +12,12 @@ import (
 
 	"bytes"
 
+	"strings"
+
 	"github.com/labstack/echo"
+	"github.com/labstack/echo/middleware"
 	"github.com/labstack/gommon/log"
+	"github.com/satori/go.uuid"
 )
 
 var syncing sync.RWMutex
@@ -88,6 +92,41 @@ func syncWithMaster() {
 	go syncWithMaster()
 }
 
+func checkpointContainerRequest(c echo.Context) error {
+	req := new(CheckpointContainerRequest)
+	if err := c.Bind(req); err != nil {
+		return err
+	}
+
+	log.Debug("checkpoint request:", req.Name, req.ToNode)
+
+	// find container
+	cID := getContainerIDByName(req.Name)
+	if cID == "" {
+		return c.String(http.StatusNotFound, "Not found")
+	}
+
+	// generate directory to checkpoint
+	uuidstr := uuid.NewV4()
+	checkpointID := fmt.Sprintf("%s-%s", req.Name, uuidstr)
+	checkpointDir := "/tmp/" + checkpointID
+
+	// checkpoint
+	err := checkpointContainer(req.Name, checkpointID, checkpointDir)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	// return checkpoint information
+	resp := &CheckpointContainerResponse{
+		Name:          req.Name,
+		CheckpointID:  checkpointID,
+		CheckpointDir: checkpointDir,
+	}
+
+	return c.JSON(http.StatusOK, resp)
+}
+
 var (
 	myIP       string
 	myAddr     string
@@ -97,6 +136,8 @@ var (
 
 func workerServer() {
 	e := echo.New()
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
 	/*
 		e.GET("/", func(c echo.Context) error {
 			return c.String(http.StatusOK, "Hello, World!")
@@ -105,7 +146,11 @@ func workerServer() {
 		e.POST("/containers/:name", createContainerRequest)
 		e.DELETE("/containers/:name", deleteContainerRequest)
 	*/
-	e.Logger.Fatal(e.Start(":1324"))
+
+	e.POST("/container/:name", checkpointContainerRequest)
+
+	port := strings.Split(myAddr, ":")[2]
+	e.Logger.Fatal(e.Start(":" + port))
 }
 
 func main() {

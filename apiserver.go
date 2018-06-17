@@ -8,6 +8,10 @@ import (
 
 	"encoding/json"
 
+	"bytes"
+
+	"io/ioutil"
+
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/labstack/gommon/log"
@@ -46,6 +50,70 @@ func createContainerRequest(c echo.Context) error {
 		Reason:          "accepted",
 	}
 	return c.JSON(http.StatusAccepted, resp)
+}
+
+func migrateContainerRequest(c echo.Context) error {
+	name := c.Param("name")
+
+	containerStatesLock.Lock()
+	defer containerStatesLock.Unlock()
+
+	// get container info
+	var containerState *ContainerState
+	for _, cState := range containerStates {
+		if cState.Name == name {
+			containerState = cState
+		}
+	}
+
+	if containerState == nil {
+		return c.String(http.StatusNotFound, "Not found")
+	}
+
+	// find alternative node except current node
+	newNode, err := FindAllocNode(containerState.Node)
+	if err != nil {
+		log.Error("Cannot find affordable node for container", containerState.Name, "current: ", containerState.Node)
+		return c.String(http.StatusRequestedRangeNotSatisfiable, "Alternative node not available")
+	}
+
+	// request checkpoint to original worker node
+	checkpointReq := CheckpointContainerRequest{
+		Name:   name,
+		ToNode: newNode.Name,
+	}
+	bodyB, err := json.Marshal(checkpointReq)
+	log.Debug("request checkpoint to Node:", string(bodyB))
+	if err != nil {
+		panic(err)
+	}
+
+	// find node addr
+	oldNodeAddr := nodeStates.Find(containerState.Node).Addr
+
+	body := bytes.NewReader(bodyB)
+	resp, err := http.Post(
+		oldNodeAddr+"/container/"+containerState.Name, "application/json", body)
+
+	if err != nil {
+		fmt.Println("checkpoint req error: ", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("checkpoint req error: not expected status ", resp.StatusCode)
+	}
+
+	defer resp.Body.Close()
+
+	bodyResp, err := ioutil.ReadAll(resp.Body)
+	fmt.Println(string(bodyResp))
+
+	// request restore to new worker node
+
+	// update container state
+
+	// update lb address (add new and remove old)
+
+	return c.String(http.StatusOK, "")
 }
 
 func deleteContainerRequest(c echo.Context) error {
@@ -174,6 +242,8 @@ func apiServer(wg sync.WaitGroup) {
 	e.GET("/containers", listContainerRequest)
 	e.POST("/containers/:name", createContainerRequest)
 	e.DELETE("/containers/:name", deleteContainerRequest)
+
+	e.POST("/migrate/:name", migrateContainerRequest)
 
 	e.GET("/node/:name", getNodeRequest)
 	e.POST("/node/:name", registerNodeRequest)
