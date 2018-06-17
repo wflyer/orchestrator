@@ -120,12 +120,7 @@ func checkpointContainer(name, checkpointID, checkpointDir string) error {
 	return nil
 }
 
-func restoreCointainer(name, checkpointID, checkpointDir string) error {
-	containerID := getContainerIDByName(name)
-	if containerID == "" {
-		return errors.New("Cannot find container")
-	}
-
+func restoreContainer(name, checkpointID, checkpointDir string) error {
 	cli, err := client.NewEnvClient()
 	defer cli.Close()
 	if err != nil {

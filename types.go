@@ -61,3 +61,13 @@ type CheckpointContainerResponse struct {
 	CheckpointID  string
 	CheckpointDir string
 }
+
+type RestoreContainerRequest struct {
+	Name          string
+	FromNode      string
+	CheckpointID  string
+	CheckpointDir string
+}
+type RestoreContainerResponse struct {
+	ContainerState ContainerState
+}

@@ -109,7 +109,7 @@ func checkpointContainerRequest(c echo.Context) error {
 	// generate directory to checkpoint
 	uuidstr := uuid.NewV4()
 	checkpointID := fmt.Sprintf("%s-%s", req.Name, uuidstr)
-	checkpointDir := "/tmp/" + checkpointID
+	checkpointDir := "/home/ubuntu/shared/" + nodename + "/" + checkpointID
 
 	// checkpoint
 	err := checkpointContainer(req.Name, checkpointID, checkpointDir)
@@ -122,6 +122,34 @@ func checkpointContainerRequest(c echo.Context) error {
 		Name:          req.Name,
 		CheckpointID:  checkpointID,
 		CheckpointDir: checkpointDir,
+	}
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func restoreContainerRequest(c echo.Context) error {
+	req := new(RestoreContainerRequest)
+	if err := c.Bind(req); err != nil {
+		return err
+	}
+
+	log.Info("restore request:", req.Name, req.FromNode)
+
+	// restore
+	err := restoreContainer(req.Name, req.CheckpointID, req.CheckpointDir)
+	if err != nil {
+		log.Error("error in restore: ", err)
+	}
+
+	// return checkpoint information
+	resp := &RestoreContainerResponse{
+		ContainerState: ContainerState{
+			Name:        req.Name,
+			ContainerID: getContainerIDByName(req.Name),
+			Node:        nodename,
+			Status:      "running",
+			Addr:        myIP + ":" + containerPort,
+		},
 	}
 
 	return c.JSON(http.StatusOK, resp)
@@ -146,7 +174,8 @@ func workerServer() {
 		e.DELETE("/containers/:name", deleteContainerRequest)
 	*/
 
-	e.POST("/container/:name", checkpointContainerRequest)
+	e.POST("/checkpoint/:name", checkpointContainerRequest)
+	e.POST("/restore/:name", restoreContainerRequest)
 
 	port := strings.Split(myAddr, ":")[2]
 	e.Logger.Fatal(e.Start(":" + port))

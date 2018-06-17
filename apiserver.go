@@ -92,7 +92,7 @@ func migrateContainerRequest(c echo.Context) error {
 	oldNodeAddr := nodeStates.Find(containerState.Node).Addr
 
 	body := bytes.NewReader(bodyB)
-	apiAddr := oldNodeAddr + "/container/" + containerState.Name
+	apiAddr := oldNodeAddr + "/checkpoint/" + containerState.Name
 	fmt.Println(">>>> request checkpoint to", apiAddr)
 	resp, err := http.Post(
 		apiAddr, "application/json", body)
@@ -107,13 +107,53 @@ func migrateContainerRequest(c echo.Context) error {
 	defer resp.Body.Close()
 
 	bodyResp, err := ioutil.ReadAll(resp.Body)
-	fmt.Println(string(bodyResp))
+	log.Debug("checkpoint resp from worker", string(bodyResp))
+
+	checkpointResp := new(CheckpointContainerResponse)
+	json.Unmarshal(bodyResp, &checkpointResp)
 
 	// request restore to new worker node
+	restoreReq := RestoreContainerRequest{
+		Name:          name,
+		FromNode:      newNode.Name,
+		CheckpointID:  checkpointResp.CheckpointID,
+		CheckpointDir: checkpointResp.CheckpointDir,
+	}
+	restoreReqBodyB, err := json.Marshal(restoreReq)
+	log.Debug("request restore to Node:", string(restoreReqBodyB))
+	if err != nil {
+		panic(err)
+	}
+	body = bytes.NewReader(restoreReqBodyB)
+	apiAddr = newNode.Addr + "/restore/" + containerState.Name
 
-	// update container state
+	fmt.Println(">>>> request restore to", apiAddr)
+	resp, err = http.Post(
+		apiAddr, "application/json", body)
+
+	if err != nil {
+		fmt.Println("restore req error: ", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("restore req error: not expected status ", resp.StatusCode)
+	}
+
+	defer resp.Body.Close()
+
+	bodyResp, err = ioutil.ReadAll(resp.Body)
+	log.Debug("restore resp from worker", string(bodyResp))
+	restoreResp := new(RestoreContainerResponse)
+	json.Unmarshal(bodyResp, &restoreResp)
 
 	// update lb address (add new and remove old)
+	proxyTarget.LB.Remove(containerState.Addr)
+	proxyTarget.LB.Add(restoreResp.ContainerState.Addr)
+
+	// update container state
+	containerState.Addr = restoreResp.ContainerState.Addr
+	containerState.Node = restoreResp.ContainerState.Node
+	containerState.Status = restoreResp.ContainerState.Status
+	containerState.ContainerID = restoreResp.ContainerState.ContainerID
 
 	return c.String(http.StatusOK, "")
 }
