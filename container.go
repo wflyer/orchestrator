@@ -112,6 +112,7 @@ func checkpointContainer(name, checkpointID, checkpointDir string) error {
 	opts := types.CheckpointCreateOptions{
 		CheckpointID:  checkpointID,
 		CheckpointDir: checkpointDir,
+		Exit:          true,
 	}
 
 	err = cli.CheckpointCreate(context.Background(), containerID, opts)
