@@ -49,7 +49,7 @@
   name = "github.com/satori/go.uuid"
   version = "1.2.0"
 
-[[constraint]]
+[[override]]
   branch = "master"
   name = "github.com/lafikl/liblb"
 
