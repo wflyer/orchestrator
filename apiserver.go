@@ -94,6 +94,9 @@ func migrateContainerRequest(c echo.Context) error {
 	body := bytes.NewReader(bodyB)
 	apiAddr := oldNodeAddr + "/checkpoint/" + containerState.Name
 	fmt.Println(">>>> request checkpoint to", apiAddr)
+
+	// remove old addr
+	proxyTarget.LB.Remove(containerState.Addr)
 	resp, err := http.Post(
 		apiAddr, "application/json", body)
 
@@ -146,7 +149,6 @@ func migrateContainerRequest(c echo.Context) error {
 	json.Unmarshal(bodyResp, &restoreResp)
 
 	// update lb address (add new and remove old)
-	proxyTarget.LB.Remove(containerState.Addr)
 	proxyTarget.LB.Add(restoreResp.ContainerState.Addr)
 
 	// update container state
