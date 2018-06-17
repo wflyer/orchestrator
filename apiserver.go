@@ -92,8 +92,10 @@ func migrateContainerRequest(c echo.Context) error {
 	oldNodeAddr := nodeStates.Find(containerState.Node).Addr
 
 	body := bytes.NewReader(bodyB)
+	apiAddr := oldNodeAddr + "/container/" + containerState.Name
+	fmt.Println(">>>> request checkpoint to", apiAddr)
 	resp, err := http.Post(
-		oldNodeAddr+"/container/"+containerState.Name, "application/json", body)
+		apiAddr, "application/json", body)
 
 	if err != nil {
 		fmt.Println("checkpoint req error: ", err)
