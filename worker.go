@@ -93,7 +93,6 @@ func syncWithMaster() {
 }
 
 func checkpointContainerRequest(c echo.Context) error {
-	panic("asdf")
 	req := new(CheckpointContainerRequest)
 	if err := c.Bind(req); err != nil {
 		return err
