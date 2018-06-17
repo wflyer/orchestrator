@@ -116,6 +116,9 @@ func checkpointContainerRequest(c echo.Context) error {
 		fmt.Println(err)
 	}
 
+	// async remove
+	go removeContainer(req.Name)
+
 	// return checkpoint information
 	resp := &CheckpointContainerResponse{
 		Name:          req.Name,
