@@ -107,9 +107,8 @@ func checkpointContainerRequest(c echo.Context) error {
 	}
 
 	// generate directory to checkpoint
-	uuidstr := uuid.NewV4()
-	checkpointID := fmt.Sprintf("%s-%s", req.Name, uuidstr)
-	checkpointDir := "/home/ubuntu/shared/" + nodename + "/" + checkpointID
+	checkpointID := fmt.Sprintf("%s", uuid.NewV4())
+	checkpointDir := "/home/ubuntu/shared/" + nodename + "/" + req.Name
 
 	// checkpoint
 	err := checkpointContainer(req.Name, checkpointID, checkpointDir)
@@ -136,7 +135,7 @@ func restoreContainerRequest(c echo.Context) error {
 	log.Info("restore request:", req.Name, req.FromNode)
 
 	// restore
-	err := restoreContainer(req.Name, req.CheckpointID, req.CheckpointDir)
+	err := restoreContainer(req.Name, imageName, imageCmd, exposedPorts, req.CheckpointID, req.CheckpointDir)
 	if err != nil {
 		log.Error("error in restore: ", err)
 	}

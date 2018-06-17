@@ -27,6 +27,7 @@ func runContainer(name, image string, cmd, exposedPorts []string) (containerID s
 	}
 	hostConfig := &container.HostConfig{
 		PortBindings: portBindings,
+		SecurityOpt:  []string{"seccomp:unconfined"},
 	}
 
 	// container configs
@@ -120,12 +121,41 @@ func checkpointContainer(name, checkpointID, checkpointDir string) error {
 	return nil
 }
 
-func restoreContainer(name, checkpointID, checkpointDir string) error {
+func restoreContainer(name, image string, cmd, exposedPorts []string, checkpointID, checkpointDir string) error {
 	cli, err := client.NewEnvClient()
 	defer cli.Close()
 	if err != nil {
 		return err
 	}
+
+	// expose ports
+	portSet, portBindings, err := nat.ParsePortSpecs(exposedPorts)
+	if err != nil {
+		return err
+	}
+	hostConfig := &container.HostConfig{
+		PortBindings: portBindings,
+		SecurityOpt:  []string{"seccomp:unconfined"},
+	}
+
+	// container configs
+	config := &container.Config{
+		Hostname:     "",
+		Domainname:   "",
+		User:         "",
+		Image:        "counter",
+		Cmd:          cmd,
+		ExposedPorts: portSet,
+	}
+
+	fmt.Println("running container", name)
+
+	resp, err := cli.ContainerCreate(context.Background(), config, hostConfig, nil, name)
+	if err != nil {
+		return err
+	}
+	containerID := resp.ID
+	fmt.Println(containerID)
 
 	opts := types.ContainerStartOptions{
 		CheckpointID:  checkpointID,
