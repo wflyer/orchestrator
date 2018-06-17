@@ -93,12 +93,13 @@ func syncWithMaster() {
 }
 
 func checkpointContainerRequest(c echo.Context) error {
+	panic("asdf")
 	req := new(CheckpointContainerRequest)
 	if err := c.Bind(req); err != nil {
 		return err
 	}
 
-	log.Debug("checkpoint request:", req.Name, req.ToNode)
+	log.Info("checkpoint request:", req.Name, req.ToNode)
 
 	// find container
 	cID := getContainerIDByName(req.Name)
@@ -137,7 +138,6 @@ var (
 func workerServer() {
 	e := echo.New()
 	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
 	/*
 		e.GET("/", func(c echo.Context) error {
 			return c.String(http.StatusOK, "Hello, World!")
