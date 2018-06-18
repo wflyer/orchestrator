@@ -91,47 +91,90 @@ func migrateContainerRequest(c echo.Context) error {
 	// find node addr
 	oldNodeAddr := nodeStates.Find(containerState.Node).Addr
 
-	body := bytes.NewReader(bodyB)
-	apiAddr := oldNodeAddr + "/checkpoint/" + containerState.Name
-	fmt.Println(">>>> request checkpoint to", apiAddr)
+	var wg sync.WaitGroup
+	wg.Add(2)
 
-	// remove old addr
-	proxyTarget.LB.Remove(containerState.Addr)
-	resp, err := http.Post(
-		apiAddr, "application/json", body)
+	var restoreReq RestoreContainerRequest
+	go func() {
+		defer wg.Done()
+		body := bytes.NewReader(bodyB)
+		apiAddr := oldNodeAddr + "/checkpoint/" + containerState.Name
+		fmt.Println(">>>> request checkpoint to", apiAddr)
 
-	if err != nil {
-		fmt.Println("checkpoint req error: ", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		fmt.Println("checkpoint req error: not expected status ", resp.StatusCode)
-	}
+		resp, err := http.Post(
+			apiAddr, "application/json", body)
 
-	defer resp.Body.Close()
+		if err != nil {
+			panic(fmt.Sprintf("checkpoint req error: ", err))
+		}
+		if resp.StatusCode != http.StatusOK {
+			panic(fmt.Sprintf("checkpoint req error: not expected status ", resp.StatusCode))
+		}
 
-	bodyResp, err := ioutil.ReadAll(resp.Body)
-	log.Debug("checkpoint resp from worker", string(bodyResp))
+		defer resp.Body.Close()
 
-	checkpointResp := new(CheckpointContainerResponse)
-	json.Unmarshal(bodyResp, &checkpointResp)
+		bodyResp, err := ioutil.ReadAll(resp.Body)
+		log.Debug("checkpoint resp from worker", string(bodyResp))
 
-	// request restore to new worker node
-	restoreReq := RestoreContainerRequest{
-		Name:          name,
-		FromNode:      newNode.Name,
-		CheckpointID:  checkpointResp.CheckpointID,
-		CheckpointDir: checkpointResp.CheckpointDir,
-	}
+		// remove old addr
+		proxyTarget.LB.Remove(containerState.Addr)
+
+		checkpointResp := new(CheckpointContainerResponse)
+		json.Unmarshal(bodyResp, &checkpointResp)
+
+		// request restore to new worker node
+		restoreReq = RestoreContainerRequest{
+			Name:          name,
+			FromNode:      newNode.Name,
+			CheckpointID:  checkpointResp.CheckpointID,
+			CheckpointDir: checkpointResp.CheckpointDir,
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		restoreCreateReq := RestoreContainerRequest{
+			Name:     name,
+			FromNode: newNode.Name,
+		}
+
+		restoreReqBodyB, err := json.Marshal(restoreCreateReq)
+		log.Debug("request restore to Node:", string(restoreReqBodyB))
+		if err != nil {
+			panic(err)
+		}
+		body := bytes.NewReader(restoreReqBodyB)
+		apiAddr := newNode.Addr + "/restorecreate/" + containerState.Name
+
+		fmt.Println(">>>> request restore to", apiAddr)
+
+		resp, err := http.Post(
+			apiAddr, "application/json", body)
+
+		if err != nil {
+			fmt.Println("restore req error: ", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			fmt.Println("restore req error: not expected status ", resp.StatusCode)
+		}
+		defer resp.Body.Close()
+
+		bodyResp, err := ioutil.ReadAll(resp.Body)
+		log.Debug("restore create resp from worker", string(bodyResp))
+		restoreCreateResp := new(RestoreContainerResponse)
+		json.Unmarshal(bodyResp, &restoreCreateResp)
+
+		// update lb address (add new and remove old)
+		proxyTarget.LB.Add(restoreCreateResp.ContainerState.Addr)
+	}()
+
+	wg.Wait()
+
+	apiAddr := newNode.Addr + "/restore/" + containerState.Name
 	restoreReqBodyB, err := json.Marshal(restoreReq)
-	log.Debug("request restore to Node:", string(restoreReqBodyB))
-	if err != nil {
-		panic(err)
-	}
-	body = bytes.NewReader(restoreReqBodyB)
-	apiAddr = newNode.Addr + "/restore/" + containerState.Name
+	body := bytes.NewReader(restoreReqBodyB)
 
-	fmt.Println(">>>> request restore to", apiAddr)
-	resp, err = http.Post(
+	resp, err := http.Post(
 		apiAddr, "application/json", body)
 
 	if err != nil {
@@ -143,13 +186,10 @@ func migrateContainerRequest(c echo.Context) error {
 
 	defer resp.Body.Close()
 
-	bodyResp, err = ioutil.ReadAll(resp.Body)
+	bodyResp, err := ioutil.ReadAll(resp.Body)
 	log.Debug("restore resp from worker", string(bodyResp))
 	restoreResp := new(RestoreContainerResponse)
 	json.Unmarshal(bodyResp, &restoreResp)
-
-	// update lb address (add new and remove old)
-	proxyTarget.LB.Add(restoreResp.ContainerState.Addr)
 
 	// update container state
 	containerState.Addr = restoreResp.ContainerState.Addr

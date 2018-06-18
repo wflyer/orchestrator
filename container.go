@@ -62,7 +62,7 @@ func getContainerIDByName(name string) string {
 	cli, err := client.NewEnvClient()
 	defer cli.Close()
 
-	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{})
+	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{All: true})
 	if err != nil {
 		panic(err)
 	}
@@ -122,17 +122,36 @@ func checkpointContainer(name, checkpointID, checkpointDir string) error {
 	return nil
 }
 
-func restoreContainer(name, image string, cmd, exposedPorts []string, checkpointID, checkpointDir string) error {
+func restoreContainer(name string, checkpointID, checkpointDir string) error {
 	cli, err := client.NewEnvClient()
 	defer cli.Close()
 	if err != nil {
 		return err
 	}
 
+	opts := types.ContainerStartOptions{
+		CheckpointID:  checkpointID,
+		CheckpointDir: checkpointDir,
+	}
+
+	err = cli.ContainerStart(context.Background(), name, opts)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func restoreCreateContainer(name, image string, cmd, exposedPorts []string) (string, error) {
+	cli, err := client.NewEnvClient()
+	defer cli.Close()
+	if err != nil {
+		return "", err
+	}
+
 	// expose ports
 	portSet, portBindings, err := nat.ParsePortSpecs(exposedPorts)
 	if err != nil {
-		return err
+		return "", err
 	}
 	hostConfig := &container.HostConfig{
 		PortBindings: portBindings,
@@ -149,23 +168,13 @@ func restoreContainer(name, image string, cmd, exposedPorts []string, checkpoint
 		ExposedPorts: portSet,
 	}
 
-	fmt.Println("running container", name)
+	fmt.Println("restore create container", name)
 
 	resp, err := cli.ContainerCreate(context.Background(), config, hostConfig, nil, name)
 	if err != nil {
-		return err
+		return "", err
 	}
 	containerID := resp.ID
 	fmt.Println(containerID)
-
-	opts := types.ContainerStartOptions{
-		CheckpointID:  checkpointID,
-		CheckpointDir: checkpointDir,
-	}
-
-	err = cli.ContainerStart(context.Background(), name, opts)
-	if err != nil {
-		return err
-	}
-	return nil
+	return containerID, nil
 }

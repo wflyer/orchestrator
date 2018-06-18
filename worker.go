@@ -138,7 +138,7 @@ func restoreContainerRequest(c echo.Context) error {
 	log.Info("restore request:", req.Name, req.FromNode)
 
 	// restore
-	err := restoreContainer(req.Name, imageName, imageCmd, exposedPorts, req.CheckpointID, req.CheckpointDir)
+	err := restoreContainer(req.Name, req.CheckpointID, req.CheckpointDir)
 	if err != nil {
 		log.Error("error in restore: ", err)
 	}
@@ -150,6 +150,33 @@ func restoreContainerRequest(c echo.Context) error {
 			ContainerID: getContainerIDByName(req.Name),
 			Node:        nodename,
 			Status:      "running",
+			Addr:        myIP + ":" + containerPort,
+		},
+	}
+
+	return c.JSON(http.StatusOK, resp)
+}
+func restoreCreateContainerRequest(c echo.Context) error {
+	req := new(RestoreContainerRequest)
+	if err := c.Bind(req); err != nil {
+		return err
+	}
+
+	log.Info("restore create request:", req.Name, req.FromNode)
+
+	// restore
+	cid, err := restoreCreateContainer(req.Name, imageName, imageCmd, exposedPorts)
+	if err != nil {
+		log.Error("error in restore create: ", err)
+	}
+
+	// return checkpoint information
+	resp := &RestoreContainerResponse{
+		ContainerState: ContainerState{
+			Name:        req.Name,
+			ContainerID: cid,
+			Node:        nodename,
+			Status:      "migrating",
 			Addr:        myIP + ":" + containerPort,
 		},
 	}
@@ -178,6 +205,7 @@ func workerServer() {
 
 	e.POST("/checkpoint/:name", checkpointContainerRequest)
 	e.POST("/restore/:name", restoreContainerRequest)
+	e.POST("/restorecreate/:name", restoreCreateContainerRequest)
 
 	port := strings.Split(myAddr, ":")[2]
 	e.Logger.Fatal(e.Start(":" + port))
