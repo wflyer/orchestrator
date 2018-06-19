@@ -381,11 +381,12 @@ func (dp *DialProxy) HandleConn(src net.Conn) {
 			cancel()
 		}
 		if err != nil {
-			time.Sleep(1 * time.Millisecond:)
+			time.Sleep(1 * time.Millisecond)
 			continue
 			dp.onDialError()(src, err)
 			return
 		}
+		break
 	}
 	defer dst.Close()
 
