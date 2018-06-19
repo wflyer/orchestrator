@@ -366,21 +366,26 @@ func (dp *DialProxy) HandleConn(src net.Conn) {
 
 	var addr string
 	var err error
-	if dp.LB != nil {
-		addr, err = dp.LB.Balance()
-		if err != nil {
+	var dst net.Conn
+	for {
+		if dp.LB != nil {
+			addr, err = dp.LB.Balance()
+			if err != nil {
+				addr = dp.Addr
+			}
+		} else {
 			addr = dp.Addr
 		}
-	} else {
-		addr = dp.Addr
-	}
-	dst, err := dp.dialContext()(ctx, "tcp", addr)
-	if cancel != nil {
-		cancel()
-	}
-	if err != nil {
-		dp.onDialError()(src, err)
-		return
+		dst, err = dp.dialContext()(ctx, "tcp", addr)
+		if cancel != nil {
+			cancel()
+		}
+		if err != nil {
+			time.Sleep(1 * time.Millisecond:)
+			continue
+			dp.onDialError()(src, err)
+			return
+		}
 	}
 	defer dst.Close()
 
@@ -388,6 +393,7 @@ func (dp *DialProxy) HandleConn(src net.Conn) {
 		dp.onDialError()(src, err)
 		return
 	}
+
 	defer src.Close()
 
 	if ka := dp.keepAlivePeriod(); ka > 0 {
