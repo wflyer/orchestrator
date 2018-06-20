@@ -12,6 +12,8 @@ import (
 
 	"io/ioutil"
 
+	"time"
+
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/labstack/gommon/log"
@@ -54,6 +56,8 @@ func createContainerRequest(c echo.Context) error {
 
 func migrateContainerRequest(c echo.Context) error {
 	name := c.Param("name")
+
+	fmt.Println("========== received request", time.Now().UnixNano())
 
 	containerStatesLock.Lock()
 	defer containerStatesLock.Unlock()
@@ -112,6 +116,7 @@ func migrateContainerRequest(c echo.Context) error {
 		}
 
 		defer resp.Body.Close()
+		fmt.Println("========== received checkpoint finished", time.Now().UnixNano())
 
 		bodyResp, err := ioutil.ReadAll(resp.Body)
 		log.Debug("checkpoint resp from worker", string(bodyResp))
@@ -164,6 +169,7 @@ func migrateContainerRequest(c echo.Context) error {
 		restoreCreateResp := new(RestoreContainerResponse)
 		json.Unmarshal(bodyResp, &restoreCreateResp)
 
+		fmt.Println("========== received restore create finished", time.Now().UnixNano())
 		// update lb address (add new and remove old)
 		proxyTarget.LB.Add(restoreCreateResp.ContainerState.Addr)
 	}()
@@ -185,6 +191,7 @@ func migrateContainerRequest(c echo.Context) error {
 	}
 
 	defer resp.Body.Close()
+	fmt.Println("========== received restore finished", time.Now().UnixNano())
 
 	bodyResp, err := ioutil.ReadAll(resp.Body)
 	log.Debug("restore resp from worker", string(bodyResp))
