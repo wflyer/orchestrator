@@ -14,6 +14,8 @@ import (
 
 	"time"
 
+	"os"
+
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/labstack/gommon/log"
@@ -57,6 +59,8 @@ func createContainerRequest(c echo.Context) error {
 func migrateContainerRequest(c echo.Context) error {
 	name := c.Param("name")
 
+	var ta, tb, tc, td int64
+	ta = time.Now().UnixNano()
 	fmt.Println("========== received request", time.Now().UnixNano())
 
 	containerStatesLock.Lock()
@@ -116,6 +120,7 @@ func migrateContainerRequest(c echo.Context) error {
 		}
 
 		defer resp.Body.Close()
+		tc = time.Now().UnixNano()
 		fmt.Println("========== received checkpoint finished", time.Now().UnixNano())
 
 		bodyResp, err := ioutil.ReadAll(resp.Body)
@@ -169,6 +174,7 @@ func migrateContainerRequest(c echo.Context) error {
 		restoreCreateResp := new(RestoreContainerResponse)
 		json.Unmarshal(bodyResp, &restoreCreateResp)
 
+		tb = time.Now().UnixNano()
 		fmt.Println("========== received restore create finished", time.Now().UnixNano())
 		// update lb address (add new and remove old)
 		proxyTarget.LB.Add(restoreCreateResp.ContainerState.Addr)
@@ -192,6 +198,7 @@ func migrateContainerRequest(c echo.Context) error {
 
 	defer resp.Body.Close()
 	fmt.Println("========== received restore finished", time.Now().UnixNano())
+	td = time.Now().UnixNano()
 
 	bodyResp, err := ioutil.ReadAll(resp.Body)
 	log.Debug("restore resp from worker", string(bodyResp))
@@ -203,6 +210,14 @@ func migrateContainerRequest(c echo.Context) error {
 	containerState.Node = restoreResp.ContainerState.Node
 	containerState.Status = restoreResp.ContainerState.Status
 	containerState.ContainerID = restoreResp.ContainerState.ContainerID
+
+	f, err := os.OpenFile("/tmp/time.csv", os.O_APPEND, 0777)
+	defer f.Close()
+	if err != nil {
+		panic(err)
+	}
+	f.WriteString(fmt.Sprintf("%d,%d,%d,%d\n", ta, tb, tc, td))
+	f.Sync()
 
 	return c.String(http.StatusOK, "")
 }
